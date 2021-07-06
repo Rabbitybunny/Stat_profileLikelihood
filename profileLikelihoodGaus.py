@@ -49,11 +49,10 @@ def main():
     dataSig = 0.8;
     dataN   = 30;
     
-    alpha              = 0.95;         #significance
-    muRange            = [-2.0, 2.0];   #search range
-    sigRange           = [0.01, 2.0];
-    profileStepSize    = 0.001;
-    optNuisanceAllIter = False;        #false to satistfy likelihood ratio test?
+    alpha           = 0.95;         #significance
+    muRange         = [-2.0, 2.0];  #search range
+    sigRange        = [0.2, 2.0];
+    profileStepSize = 0.001;
 #data
     nbins = np.linspace(rangeX[0], rangeX[1], binN);
     dataPDF = np.random.normal(dataMu, dataSig, dataN);
@@ -82,7 +81,8 @@ def main():
     if verbosity >= 1:
         print("Likelihood profiling for mu...");
     muProfile = [];
-    muLikelihood = [];
+    muProfileLikelihood = [];
+    muMaxLikelihoodProfile = [];
     muOpt = [0, 0.0, 0.0, -pow(10, 24)];
     muRangeN = int((muRange[1]-muRange[0])/profileStepSize);
     for i in (tqdm(range(muRangeN)) if verbosity>=1 else range(muRangeN)):
@@ -96,19 +96,18 @@ def main():
         muProfile.append(mu);
         if optLikelihood > muOpt[3]:
             muOpt = [i, mu, sig, optLikelihood];
-        if optNuisanceAllIter == True: 
-            muLikelihood.append(optLikelihood);
-    if optNuisanceAllIter == False:
-        for i in range(muRangeN):
-            mu = muRange[0] + i*profileStepSize;
-            negLL = negLogLikeMu(mu, dataPDF);
-            optLikelihood = -1.0*negLL(muOpt[2]);
-            muLikelihood.append(optLikelihood);
+        muProfileLikelihood.append(optLikelihood);
+    for i in range(muRangeN):
+        mu = muRange[0] + i*profileStepSize;
+        negLL = negLogLikeMu(mu, dataPDF);
+        optLikelihood = -1.0*negLL(maxLikeSig);
+        muMaxLikelihoodProfile.append(optLikelihood);
 
     if verbosity >= 1:
         print("Likelihood profiling for sigma...");
     sigProfile = [];
-    sigLikelihood = [];
+    sigProfileLikelihood = [];
+    sigMaxLikelihoodProfile = [];
     sigOpt = [0, 0.0, 0.0, -pow(10, 24)];
     sigRangeN = int((sigRange[1]-sigRange[0])/profileStepSize);
     for i in (tqdm(range(sigRangeN)) if verbosity>=1 else range(sigRangeN)):
@@ -122,14 +121,12 @@ def main():
         sigProfile.append(sig);
         if optLikelihood > sigOpt[3]:
             sigOpt = [i, mu, sig, optLikelihood];
-        if optNuisanceAllIter == True:    
-            sigLikelihood.append(optLikelihood);
-    if optNuisanceAllIter == False:
-        for i in range(sigRangeN):
-            sig = sigRange[0] + i*profileStepSize;
-            negLL = negLogLikeSig(sig, dataPDF);
-            optLikelihood = -1.0*negLL(sigOpt[1]);
-            sigLikelihood.append(optLikelihood);
+        sigProfileLikelihood.append(optLikelihood);
+    for i in range(sigRangeN):
+        sig = sigRange[0] + i*profileStepSize;
+        negLL = negLogLikeSig(sig, dataPDF);
+        optLikelihood = -1.0*negLL(maxLikeMu);
+        sigMaxLikelihoodProfile.append(optLikelihood);
 #alpha significance from likelihood ratio test for profile likelihood
     chi2ppf = stats.chi2.ppf(alpha, 1);
     muConfInt = [0.0, 0.0];
@@ -141,7 +138,7 @@ def main():
         if muOpt[0] + stepIdx > muRangeN:
             print("WARNING: Please increase the search range for mu.");
             break;
-        logLikelihood = muLikelihood[muOpt[0] + stepIdx];
+        logLikelihood = muProfileLikelihood[muOpt[0] + stepIdx];
     muConfInt[0] = abs(muProfile[muOpt[0] + stepIdx] - muOpt[1]);
     stepIdx = 0;
     logLikelihood = muOpt[3];
@@ -150,7 +147,7 @@ def main():
         if muOpt[0] - stepIdx < 0:
             print("WARNING: Please increase the search range for mu.");
             break;
-        logLikelihood = muLikelihood[muOpt[0] - stepIdx];
+        logLikelihood = muProfileLikelihood[muOpt[0] - stepIdx];
     muConfInt[1] = abs(muProfile[muOpt[0] - stepIdx] - muOpt[1]);
 
     sigConfInt = [0.0, 0.0];
@@ -161,7 +158,7 @@ def main():
         if sigOpt[0] + stepIdx > sigRangeN:
             print("WARNING: Please increase the search range for sigma.");
             break;
-        logLikelihood = sigLikelihood[sigOpt[0] + stepIdx];
+        logLikelihood = sigProfileLikelihood[sigOpt[0] + stepIdx];
     sigConfInt[0] = abs(sigProfile[sigOpt[0] + stepIdx] - sigOpt[2]);
     stepIdx = 0;
     logLikelihood = sigOpt[3];
@@ -170,7 +167,7 @@ def main():
         if sigOpt[0] - stepIdx < 0:
             print("WARNING: Please increase the search range for sigma.");
             break;
-        logLikelihood = sigLikelihood[sigOpt[0] - stepIdx];
+        logLikelihood = sigProfileLikelihood[sigOpt[0] - stepIdx];
     sigConfInt[1] = abs(sigProfile[sigOpt[0] - stepIdx] - sigOpt[2]);
 #alpha confidence convertion
     alphaCov = alpha + (1.0 - alpha)/2.0;
@@ -195,7 +192,8 @@ def main():
     ax0.axhline(y=0, color="black", linestyle="-");
     ax0.axvline(x=np.average(dataPDF), ymin=0, ymax=1, color="green", \
                 linestyle="--");
-    ax0.set_title("Data and Point Estimate, alpha="+str(alpha), fontsize=24, y=1.03);
+    ax0.set_title("Data and Point Estimate, alpha="+str(alpha),\
+                  fontsize=24, y=1.03);
     ax0.set_xlabel("x", fontsize=18);
     ax0.set_ylabel("count", fontsize=18);
     ax0.set_xlim(rangeX[0]-1.0, rangeX[1]+1.0);
@@ -222,7 +220,7 @@ def main():
     ax0.text(xmin+0.05*(xmax-xmin),ymin+0.79*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "sig = " + str(valSig0r) + "$\pm$" + str(errSig0r);
     ax0.text(xmin+0.05*(xmax-xmin),ymin+0.75*(ymax-ymin),strTemp,fontdict=font);
-    #plot 1
+    #plot 3
     #idxList = np.unique(np.array(valTrace), axis=0, return_index=True)[1];
     #valTrace = [valTrace[idx] for idx in sorted(idxList)];
     tracePlotTolerance = pow(10, -3);
@@ -237,12 +235,12 @@ def main():
         
     xList = [trace[0] for trace in plotTrace];
     yList = [trace[1] for trace in plotTrace];
-    ax1.plot(xList, yList, "-x", color="black", markersize=6, markeredgewidth=2);
-    ax1.set_title("Maximum Likelihood Optimization Trace", fontsize=24, y=1.03);
-    ax1.set_xlabel("mu", fontsize=18);
-    ax1.set_ylabel("sig", fontsize=18);
-    ax1.set_xlim(muRange[0], muRange[1]);
-    ax1.set_ylim(sigRange[0], sigRange[1]);
+    ax3.plot(xList, yList, "-x", color="black", markersize=6, markeredgewidth=2);
+    ax3.set_title("Maximum Likelihood Optimization Trace", fontsize=24, y=1.03);
+    ax3.set_xlabel("mu", fontsize=18);
+    ax3.set_ylabel("sig", fontsize=18);
+    ax3.set_xlim(muRange[0], muRange[1]);
+    ax3.set_ylim(sigRange[0], sigRange[1]);
 
     #https://stackoverflow.com/questions/58342419
     dataframe = pd.DataFrame.from_dict({"x": xList, "y": yList});
@@ -257,12 +255,12 @@ def main():
     xdir = x1-x0;
     ydir = y1-y0;
     for i, (X, Y, dX, dY) in enumerate(zip(xpos, ypos, xdir, ydir)):
-        ax1.annotate("", xytext=(X,Y), xy=(X+0.001*dX,Y+0.001*dY), size=20,\
+        ax3.annotate("", xytext=(X,Y), xy=(X+0.001*dX,Y+0.001*dY), size=20,\
                      arrowprops=dict(arrowstyle="->",color="blue",linewidth=2,\
                                      alpha=(1.0-1.0*i/len(xpos))));
-    ax1.plot(xList[0], yList[0], "ro", color="blue", markersize=8, zorder=5); 
-    ax1.plot(xList[-1], yList[-1], "ro", color="green", markersize=8, zorder=5);
-    ax1.errorbar(xList[-1], yList[-1], xerr=maxErrMu, yerr=maxErrSig,\
+    ax3.plot(xList[0],  yList[0],  "ro", color="blue", markersize=8, zorder=5); 
+    ax3.plot(xList[-1], yList[-1], "ro", color="green", markersize=8, zorder=5);
+    ax3.errorbar(xList[-1], yList[-1], xerr=maxErrMu, yerr=maxErrSig,\
                  color="green", linewidth=2.5, ls="none", zorder=5,\
                  capsize=6, markeredgewidth=2.5);
 
@@ -271,60 +269,71 @@ def main():
     maxErrMu1r   = ("{:." + str(digit1) + "f}").format(maxErrMu);
     maxLikeSig1r = ("{:." + str(digit1) + "f}").format(maxLikeSig);
     maxErrSig1r  = ("{:." + str(digit1) + "f}").format(maxErrSig);
-    xmin, xmax = ax1.get_xlim();
-    ymin, ymax = ax1.get_ylim();
+    xmin, xmax = ax3.get_xlim();
+    ymin, ymax = ax3.get_ylim();
     font = {"family": "serif", "color": "blue", "weight": "bold", "size": 10};
-    ax1.text(valTrace[0][0]+0.01*(xmax-xmin),\
+    ax3.text(valTrace[0][0]+0.01*(xmax-xmin),\
              valTrace[0][1]+0.01*(ymax-ymin), "init", fontdict=font);
     font = {"family": "serif", "color": "green", "weight": "bold", "size": 18};
     strTemp = "Max Like: ";
-    ax1.text(xmin+0.01*(xmax-xmin),ymin+0.96*(ymax-ymin),strTemp,fontdict=font);
+    ax3.text(xmin+0.01*(xmax-xmin),ymin+0.96*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "mu = " + str(maxLikeMu1r) + "$\pm$" + str(maxErrMu1r);
-    ax1.text(xmin+0.05*(xmax-xmin),ymin+0.92*(ymax-ymin),strTemp,fontdict=font);
+    ax3.text(xmin+0.05*(xmax-xmin),ymin+0.92*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "sig = " + str(maxLikeSig1r) + "$\pm$" + str(maxErrSig1r);
-    ax1.text(xmin+0.05*(xmax-xmin),ymin+0.88*(ymax-ymin),strTemp,fontdict=font);
-    #plot 2
-    ax2.plot(muProfile, muLikelihood, alpha=1.0, color="black", ls="steps-mid",\
-             zorder=0);
-    ax2.set_title("Log-Likelihood Mu Profile", fontsize=24, y=1.03);
-    ax2.set_xlabel("mu", fontsize=18);
-    ax2.set_ylabel("log-likelihood", fontsize=18);
-    ax2.set_xlim(muRange[0], muRange[1]);
+    ax3.text(xmin+0.05*(xmax-xmin),ymin+0.88*(ymax-ymin),strTemp,fontdict=font);
+    #plot 1
+    ax1.plot(muProfile, muProfileLikelihood, alpha=1.0, color="purple",\
+             linewidth=3, ls="steps-mid", zorder=0);
+    ax1.plot(muProfile, muMaxLikelihoodProfile, alpha=1.0, color="green",\
+             linewidth=2, linestyle="--", ls="steps-mid");
+    ax1.set_title("Log-Likelihood Mu Profile", fontsize=24, y=1.03);
+    ax1.set_xlabel("mu", fontsize=18);
+    ax1.set_ylabel("log-likelihood", fontsize=18);
+    ax1.set_xlim(muRange[0], muRange[1]);
 
-    ax2.axvline(x=muOpt[1], ymin=0, ymax=1, color="green", linestyle="--");
-    ax2.axvline(x=(muOpt[1]-muConfInt[0]), ymin=0, ymax=1, \
-                color="green", alpha=0.5, linestyle=":");
-    ax2.axvline(x=(muOpt[1]+muConfInt[1]), ymin=0, ymax=1, \
-                color="green", alpha=0.5, linestyle=":");
-    ymin, ymax = ax2.get_ylim();
-    font = {"family": "serif", "color": "green", "weight": "bold", "size": 18};
+    ax1.axvline(x=muOpt[1], ymin=0, ymax=1, color="purple", linestyle="--");
+    ax1.axvline(x=(muOpt[1]-muConfInt[0]), ymin=0, ymax=1, \
+                color="purple", alpha=0.5, linestyle=":");
+    ax1.axvline(x=(muOpt[1]+muConfInt[1]), ymin=0, ymax=1, \
+                color="purple", alpha=0.5, linestyle=":");
+    xmin, xmax = ax1.get_xlim();
+    ymin, ymax = ax1.get_ylim();
+    font = {"family": "serif", "color": "purple", "weight": "bold", "size": 18};
     digit2  = -math.floor(math.log10(max(muConfInt))) + 1;
     valMu2r  = ("{:." + str(digit2) + "f}").format(muOpt[1]);
     errMu2rN = ("{:." + str(digit2) + "f}").format(muConfInt[0]);
     errMu2rP = ("{:." + str(digit2) + "f}").format(muConfInt[1]);
     strTemp = "mu = "+str(valMu2r)+"+"+str(errMu2rP)+"-"+str(errMu2rN);
-    ax2.text(muOpt[1], ymin+0.01*(ymax-ymin), strTemp, fontdict=font);
-    #plot 3
-    ax3.plot(sigProfile, sigLikelihood, alpha=1.0, color="black", ls="steps-mid",\
-             zorder=0);
-    ax3.set_title("Log-Likelihood Sigma Profile", fontsize=24, y=1.03);
-    ax3.set_xlabel("sigma", fontsize=18);
-    ax3.set_ylabel("log-likelihood", fontsize=18);
-    ax3.set_xlim(sigRange[0], sigRange[1]);
+    ax1.text(muOpt[1], ymin+0.01*(ymax-ymin), strTemp, fontdict=font);
+    strTemp = "Nuisance Par:\n  sig";
+    ax1.text(xmin+0.72*(xmax-xmin), ymin+0.91*(ymax-ymin), strTemp,fontdict=font);
+    #plot 2
+    ax2.plot(sigProfileLikelihood, sigProfile, alpha=1.0, color="purple",\
+             linewidth=3, ls="steps-mid", zorder=0);
+    ax2.plot(sigMaxLikelihoodProfile, sigProfile, alpha=1.0, color="green",\
+             linewidth=2, linestyle="--", ls="steps-mid");
+    ax2.set_title("Log-Likelihood Sigma Profile", fontsize=24, y=1.03);
+    ax2.set_xlabel("log-likelihood", fontsize=18);
+    ax2.set_ylabel("sigma", fontsize=18);
+    ax2.set_ylim(sigRange[0], sigRange[1]);
+    
 
-    ax3.axvline(x=sigOpt[2], ymin=0, ymax=1, color="green", linestyle="--");
-    ax3.axvline(x=(sigOpt[2]-sigConfInt[0]), ymin=0, ymax=1, \
-                color="green", alpha=0.5, linestyle=":");
-    ax3.axvline(x=(sigOpt[2]+sigConfInt[1]), ymin=0, ymax=1, \
-                color="green", alpha=0.5, linestyle=":");
-    ymin, ymax = ax3.get_ylim();
-    font = {"family": "serif", "color": "green", "weight": "bold", "size": 18};
+    ax2.axhline(y=sigOpt[2], xmin=0, xmax=1, color="purple", linestyle="--");
+    ax2.axhline(y=(sigOpt[2]-sigConfInt[0]), xmin=0, xmax=1, \
+                color="purple", alpha=0.5, linestyle=":");
+    ax2.axhline(y=(sigOpt[2]+sigConfInt[1]), xmin=0, xmax=1, \
+                color="purple", alpha=0.5, linestyle=":");
+    ax2.invert_xaxis();
+    xmin, xmax = ax2.get_xlim();
+    ymin, ymax = ax2.get_ylim();
     digit3  = -math.floor(math.log10(max(sigConfInt))) + 1;
     valSig3r  = ("{:." + str(digit3) + "f}").format(sigOpt[2]);
     errSig3rN = ("{:." + str(digit3) + "f}").format(sigConfInt[0]);
     errSig3rP = ("{:." + str(digit3) + "f}").format(sigConfInt[1]);
     strTemp = "sig = "+str(valSig3r)+"+"+str(errSig3rP)+"-"+str(errSig3rN);
-    ax3.text(sigOpt[2], ymin+0.01*(ymax-ymin), strTemp, fontdict=font);
+    ax2.text(xmin+0.5*(xmax-xmin), sigOpt[2], strTemp, fontdict=font);
+    strTemp = "Nuisance Par:\n  mu";
+    ax2.text(xmin+0.72*(xmax-xmin), ymin+0.91*(ymax-ymin), strTemp,fontdict=font);
 
     if verbosity >= 1:
         print("Pt Est: ");
