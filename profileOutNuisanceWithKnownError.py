@@ -27,8 +27,9 @@ def logGaus(mu, sig, x, trace=None):
     if trace != None:
         trace.append([mu, sig]);
     X = np.array(x);
-    vals = -np.log(sig*np.sqrt(2.0*np.pi))\
-           -np.power(X-mu,2.0)/(2.0*np.power(sig,2.0));
+    vals = np.exp(-np.power(X-mu,2.0)/(2.0*np.power(sig,2.0)))\
+         *(1.0/(sig*np.sqrt(2.0*np.pi)));
+    vals = np.log(vals);
     LL = sum(vals);
     return LL;
 def negLogLikelihood(x, trace=None):
@@ -37,6 +38,30 @@ def negLogLikeMu(mu, x):
     return lambda sig : -1.0*logGaus(mu, sig, x);
 def negLogLikeSig(sig, x):
     return lambda mu : -1.0*logGaus(mu, sig, x);
+def logGausUniBK(mu, sig, noiseR, x,\
+                 noisePar=[0.0, 1.0], noiseRange=[0.0, 1.0], trace=None):
+    if trace != None:
+        trace.append([mu, sig]);
+    X = np.array(x);
+    gaus = np.exp(-np.power(X-mu,2.0)/(2.0*np.power(sig,2.0)))\
+         *(1.0/(sig*np.sqrt(2.0*np.pi)));
+    uni = np.ones(len(x))*1.0/(noiseRange[1] - noiseRange[0]);
+    vals = np.log((1.0 - noiseR)*gaus + noiseR*uni);
+    #NOTE: to profile out the nuisance parameter with know error;
+    #likelihood function L = L_main(mu, sig, noiseR)*L_noise(noiseR, noisePar)
+    noiseGaus = math.exp(-pow(noiseR-noisePar[0],2.0)/(2.0*pow(noisePar[1],2.0)))\
+              *(1.0/(noisePar[1]*math.sqrt(2.0*math.pi)));
+    LL = sum(vals) + len(x)*math.log(noiseGaus);
+    return LL;
+def negLogLikelihoodUniBK(x,   noisePar=[0.0, 1.0], noiseRange=[0.0, 1.0], trace=None):
+    return lambda par : -1.0*logGausUniBK(par[0], par[1], par[2], x,\
+                                          noisePar, noiseRange, trace);
+def negLogLikeMuUniBK(mu, x,   noisePar=[0.0, 1.0], noiseRange=[0.0, 1.0]):
+    return lambda par : -1.0*logGausUniBK(mu, par[0], par[1], x,\
+                                          noisePar, noiseRange);
+def negLogLikeSigUniBK(sig, x, noisePar=[0.0, 1.0], noiseRange=[0.0, 1.0]):
+    return lambda par : -1.0*logGausUniBK(par[0], sig, par[1], x,\
+                                          noisePar, noiseRange);
 
     
 def main():
@@ -44,17 +69,25 @@ def main():
     binN = 200;
     rangeX = [0.0, 10.0];
 
-    np.random.seed(2);
+    np.random.seed(0);
     dataMu  = 4.8;
     dataSig = 0.6;
-    dataN   = 30;
+    dataN   = 100;
+    #assume the uniform background has a range of rangeX
+    #with ratio to the data being noiseR \pm noiseRerr
+    noiseR    = 0.3; 
+    noiseRerr = 0.05;
     
     alpha           = 0.95;        #significance
     muRange         = [4.0, 6.0];  #search range
     sigRange        = [0.2, 2.0];
     profileStepSize = 0.001;
 #data
-    dataPDF = np.random.normal(dataMu, dataSig, dataN);
+    noiseR = np.random.normal(noiseR, noiseRerr);
+    noisePDF = np.random.uniform(*rangeX, int(noiseR*dataN));
+    dataPDF  = np.random.normal(dataMu, dataSig, dataN);
+    dataPDF = np.concatenate((dataPDF, noisePDF));
+    np.random.shuffle(dataPDF);
     nbins = np.linspace(*rangeX, binN+1)[:-1]
     dataHist = np.histogram(dataPDF[:dataN], bins=binN, range=rangeX)[0]
 #point estimate
@@ -65,12 +98,13 @@ def main():
 #maximum likelihood
     if verbosity >= 1:
         print("Processing maximum likelihood...");
-    #optInitVals = [valMu, valSig];
-    optInitVals = [4.5, 1.5];
+    #optInitVals = [valMu, valSig, noiseR];
+    optInitVals = [4.5, 1.5, noiseR];
     valTrace = [];
-    negMaxLL = negLogLikelihood(dataPDF, trace=valTrace);
+    negMaxLL = negLogLikelihoodUniBK(dataPDF, noisePar=[noiseR, noiseRerr], 
+                                     noiseRange=rangeX, trace=valTrace);
     optResult = optimize.minimize(negMaxLL, optInitVals, method="Nelder-Mead");
-    [maxLikeMu, maxLikeSig] = optResult.x;
+    maxLikeMu, maxLikeSig, maxLikeNoiseR = optResult.x;
 #max like standard error using sqrt 1/(Fisher information)
     maxErrMu = maxLikeSig*np.sqrt(1.0/dataN);
     maxErrSig = maxLikeSig*np.sqrt(1.0/(2.0*dataN));
@@ -80,24 +114,29 @@ def main():
     muProfile = [];
     muProfileLikelihood = [];
     muMaxLikelihoodProfile = [];
-    muOpt = [0, 0.0, 0.0, -pow(10, 24)];
+    muOpt = [0, 0.0, 0.0, -pow(10, 24), 0];
     muRangeN = int((muRange[1]-muRange[0])/profileStepSize);
     for i in (tqdm(range(muRangeN)) if verbosity>=1 else range(muRangeN)):
         mu = muRange[0] + i*profileStepSize;
-        negLL = negLogLikeMu(mu, dataPDF);
-        optResult = optimize.minimize_scalar(negLL, tol=TOLERANCE,\
-                                             method="bounded",\
-                                             bounds=(sigRange[0], sigRange[1]));
-        sig = 1.0*optResult.x;
-        optLikelihood = -1.0*negLL(sig);
+        negLL = negLogLikeMuUniBK(mu, dataPDF,\
+                                  noisePar=[noiseR, noiseRerr], noiseRange=rangeX);
+        #optResult = optimize.minimize_scalar(negLL, tol=TOLERANCE,\
+        #                                     method="bounded",\
+        #                                     bounds=(sigRange[0], sigRange[1]));
+        #sig = 1.0*optResult.x;
+        optResult = optimize.minimize(negLL, [optInitVals[1], optInitVals[2]], \
+                                      method="Nelder-Mead");
+        sig, optR = 1.0*optResult.x;
+        optLikelihood = -1.0*negLL([sig, optR]);
         muProfile.append(mu);
         if optLikelihood > muOpt[3]:
-            muOpt = [i, mu, sig, optLikelihood];
+            muOpt = [i, mu, sig, optLikelihood, optR];
         muProfileLikelihood.append(optLikelihood);
     for i in range(muRangeN):
         mu = muRange[0] + i*profileStepSize;
-        negLL = negLogLikeMu(mu, dataPDF);
-        optLikelihood = -1.0*negLL(maxLikeSig);
+        negLL = negLogLikeMuUniBK(mu, dataPDF,\
+                                  noisePar=[noiseR, noiseRerr], noiseRange=rangeX);
+        optLikelihood = -1.0*negLL([maxLikeSig, maxLikeNoiseR]);
         muMaxLikelihoodProfile.append(optLikelihood);
 
     if verbosity >= 1:
@@ -109,20 +148,25 @@ def main():
     sigRangeN = int((sigRange[1]-sigRange[0])/profileStepSize);
     for i in (tqdm(range(sigRangeN)) if verbosity>=1 else range(sigRangeN)):
         sig = sigRange[0] + i*profileStepSize;
-        negLL = negLogLikeSig(sig, dataPDF);
-        optResult = optimize.minimize_scalar(negLL, tol=TOLERANCE,\
-                                             method="bounded",\
-                                             bounds=(muRange[0], muRange[1]));
-        mu = 1.0*optResult.x;
-        optLikelihood = -1.0*negLL(mu);
+        negLL = negLogLikeSigUniBK(sig, dataPDF,\
+                                   noisePar=[noiseR, noiseRerr], noiseRange=rangeX);
+        #optResult = optimize.minimize_scalar(negLL, tol=TOLERANCE,\
+        #                                     method="bounded",\
+        #                                     bounds=(muRange[0], muRange[1]));
+        #mu = 1.0*optResult.x;
+        optResult = optimize.minimize(negLL, [optInitVals[0], optInitVals[2]], \
+                                      method="Nelder-Mead");
+        mu, optR = 1.0*optResult.x;
+        optLikelihood = -1.0*negLL([mu, optR]);
         sigProfile.append(sig);
         if optLikelihood > sigOpt[3]:
-            sigOpt = [i, mu, sig, optLikelihood];
+            sigOpt = [i, mu, sig, optLikelihood, optR];
         sigProfileLikelihood.append(optLikelihood);
     for i in range(sigRangeN):
         sig = sigRange[0] + i*profileStepSize;
-        negLL = negLogLikeSig(sig, dataPDF);
-        optLikelihood = -1.0*negLL(maxLikeMu);
+        negLL = negLogLikeSigUniBK(sig, dataPDF,\
+                                   noisePar=[noiseR, noiseRerr], noiseRange=rangeX);
+        optLikelihood = -1.0*negLL([maxLikeMu, maxLikeNoiseR]);
         sigMaxLikelihoodProfile.append(optLikelihood);
 #alpha significance from likelihood ratio test for profile likelihood
     chi2ppf = stats.chi2.ppf(alpha, 1);
@@ -211,12 +255,14 @@ def main():
     ax0.text(xmin+0.05*(xmax-xmin),ymin+0.92*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "sig = " + str(dataSig);
     ax0.text(xmin+0.05*(xmax-xmin),ymin+0.88*(ymax-ymin),strTemp,fontdict=font);
+    strTemp = "noise r = " + str(round(noiseR, 2));
+    ax0.text(xmin+0.05*(xmax-xmin),ymin+0.84*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "Pt Est: ";
-    ax0.text(xmin+0.01*(xmax-xmin),ymin+0.83*(ymax-ymin),strTemp,fontdict=font);
+    ax0.text(xmin+0.01*(xmax-xmin),ymin+0.79*(ymax-ymin),strTemp,fontdict=font);
     strTemp = "mu = " + str(valMu0r) + "$\pm$" + str(errMu0r);
-    ax0.text(xmin+0.05*(xmax-xmin),ymin+0.79*(ymax-ymin),strTemp,fontdict=font);
-    strTemp = "sig = " + str(valSig0r) + "$\pm$" + str(errSig0r);
     ax0.text(xmin+0.05*(xmax-xmin),ymin+0.75*(ymax-ymin),strTemp,fontdict=font);
+    strTemp = "sig = " + str(valSig0r) + "$\pm$" + str(errSig0r);
+    ax0.text(xmin+0.05*(xmax-xmin),ymin+0.71*(ymax-ymin),strTemp,fontdict=font);
     #plot 3
     #idxList = np.unique(np.array(valTrace), axis=0, return_index=True)[1];
     #valTrace = [valTrace[idx] for idx in sorted(idxList)];
@@ -301,7 +347,7 @@ def main():
     errMu2rP = ("{:." + str(digit2) + "f}").format(muConfInt[1]);
     strTemp = "mu = "+str(valMu2r)+"+"+str(errMu2rP)+"-"+str(errMu2rN);
     ax1.text(muOpt[1], ymin+0.01*(ymax-ymin), strTemp, fontdict=font);
-    strTemp = "Nuisance Par:\n  sig";
+    strTemp = "Nuisance Par:\n  sig, noise r";
     ax1.text(xmin+0.72*(xmax-xmin), ymin+0.91*(ymax-ymin), strTemp,fontdict=font);
     #plot 2
     ax2.plot(sigProfileLikelihood, sigProfile, alpha=1.0, color="purple",\
@@ -328,10 +374,13 @@ def main():
     errSig3rP = ("{:." + str(digit3) + "f}").format(sigConfInt[1]);
     strTemp = "sig = "+str(valSig3r)+"+"+str(errSig3rP)+"-"+str(errSig3rN);
     ax2.text(xmin+0.5*(xmax-xmin), sigOpt[2], strTemp, fontdict=font);
-    strTemp = "Nuisance Par:\n  mu";
+    strTemp = "Nuisance Par:\n  mu, noise r";
     ax2.text(xmin+0.72*(xmax-xmin), ymin+0.91*(ymax-ymin), strTemp,fontdict=font);
 
     if verbosity >= 1:
+        print("True Val: "); 
+        print("    mu  = " + str(dataMu));
+        print("    sig = " + str(dataSig), end = "");
         print("Pt Est: ");
         print("    mu  = " + str(valMu) + " +/- " + str(errMu));
         print("    sig = " + str(valSig), end = "");
@@ -349,7 +398,7 @@ def main():
               " + " + str(sigConfInt[1]) + " - " + str(sigConfInt[0]));
 #save plots
     exepath = os.path.dirname(os.path.abspath(__file__));
-    filenameFig = exepath + "/gausProfileNoNoise.png";
+    filenameFig = exepath + "/gausProfileUniNoise.png";
     gs.tight_layout(fig);
     plt.savefig(filenameFig);
 
