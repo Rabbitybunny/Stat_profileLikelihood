@@ -12,7 +12,7 @@ The code runs on python3 with additional packages:
     python3 profileLikelihoodGaus.py
 The code outputs the following image:
 
-<img src="https://github.com/Rabbitybunny/Stat_profileLikelihood/blob/main/gausProfileNoNoise.png" width="630" height="490">
+<img src="https://github.com/SphericalCowww/Stat_profileLikelihood/blob/main/gausProfileNoNoise.png" width="630" height="490">
 
 - Top-left: blue distribution is the sample drawn from the red Gaussian curve. The top-left coner gives the true values (True Val) and the confidence intervals using point estimate (Pt Est). The point estimate confident interval for &sigma; is shown to be not availabe; it's possible to do, but very difficult.
 - Bottom-right: the optimization trace of the maximum likelihood method. The initial point is label "init" in blue, and the optimal point is labeled green. The green error bars are the corresponding confidence intervals (Max Like) are provided on the top-left coner. These confidence intervals are obtained using the inverse of the Fisher information.
@@ -28,7 +28,7 @@ The code runs with:
     python3 profileOutNuisanceWithKnownError.py
 The code outputs the following image:
 
-<img src="https://github.com/Rabbitybunny/Stat_profileLikelihood/blob/main/gausProfileUniNoise.png" width="630" height="490">
+<img src="https://github.com/SphericalCowww/Stat_profileLikelihood/blob/main/gausProfileUniNoise.png" width="630" height="490">
 
 The plot is essentially the same as the previous. However, this time the likelihood function L takes into account of the R distribution: <br/>
 &ensp;&ensp; **L**<sub>overall</sub>(sample, &mu;, &sigma;, R, &mu;(R), &sigma;(R)) = **L**<sub>main</sub>(sample, &mu;, &sigma;, R) x **L**<sub>R</sub>(R, &mu;(R), &sigma;(R))<br/>
