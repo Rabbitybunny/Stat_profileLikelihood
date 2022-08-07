@@ -37,7 +37,7 @@ This time, only the profile likelihood method can derive the confidence interval
 
 
 References:
-- Meerkat Statistics's Youtube channel (2020) (<a href="https://www.youtube.com/watch?v=WXqzug1aOXI&t=1s">Youtube</a>)
+- Meerkat Statistics's Youtube channel (2020) (<a href="https://www.youtube.com/watch?v=WXqzug1aOXI">Youtube</a>)
 - E. Aprile et al., Phys. Rev. D 84, 052003 (2011) (<a href="https://journals.aps.org/prd/abstract/10.1103/PhysRevD.84.052003">Phy Rev D</a>, <a href="https://arxiv.org/abs/1103.0303">arxiv</a>)
 
 
