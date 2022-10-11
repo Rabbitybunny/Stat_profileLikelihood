@@ -227,7 +227,7 @@ def main():
     ax3 = fig.add_subplot(gs[3]);
     #plot 0
     gaussPlot = gaussian(dataMu, dataSig, nbins);
-    ax0.plot(nbins, dataHist, linewidth=2, color="blue", linestyle="steps-mid");
+    ax0.plot(nbins, dataHist, linewidth=2, color="blue", drawstyle="steps-post");
     ax0.plot(nbins, gaussPlot*np.sum(dataHist)/np.sum(gaussPlot), linewidth=2, \
              alpha=0.8, color="red")
     ax0.axhline(y=0, color="black", linestyle="-");
@@ -325,9 +325,9 @@ def main():
     ax3.text(xmin+0.05*(xmax-xmin),ymin+0.88*(ymax-ymin),strTemp,fontdict=font);
     #plot 1
     ax1.plot(muProfile, muProfileLikelihood, alpha=1.0, color="purple",\
-             linewidth=3, ls="steps-mid", zorder=0);
+             linewidth=3, drawstyle="steps-post", zorder=0);
     ax1.plot(muProfile, muMaxLikelihoodProfile, alpha=1.0, color="green",\
-             linewidth=2, linestyle="--", ls="steps-mid");
+             linewidth=2, linestyle="--", drawstyle="steps-post");
     ax1.set_title("Log-Likelihood Mu Profile", fontsize=24, y=1.03);
     ax1.set_xlabel("mu", fontsize=18);
     ax1.set_ylabel("log-likelihood", fontsize=18);
@@ -351,9 +351,9 @@ def main():
     ax1.text(xmin+0.72*(xmax-xmin), ymin+0.91*(ymax-ymin), strTemp,fontdict=font);
     #plot 2
     ax2.plot(sigProfileLikelihood, sigProfile, alpha=1.0, color="purple",\
-             linewidth=3, ls="steps-mid", zorder=0);
+             linewidth=3, drawstyle="steps-post", zorder=0);
     ax2.plot(sigMaxLikelihoodProfile, sigProfile, alpha=1.0, color="green",\
-             linewidth=2, linestyle="--", ls="steps-mid");
+             linewidth=2, linestyle="--", drawstyle="steps-post");
     ax2.set_title("Log-Likelihood Sigma Profile", fontsize=24, y=1.03);
     ax2.set_xlabel("log-likelihood", fontsize=18);
     ax2.set_ylabel("sigma", fontsize=18);
